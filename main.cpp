@@ -90,57 +90,132 @@ class CircleSplatting {
 		}
 	};
 
-	struct Circle {
+	struct Shape {
 		Vec2f center;
 		float radius;
 		Vec3f color;
 	};
 
-	Circle shiftCircle(const Circle &circle, const float shiftX,
-					   const float shiftY, const float shiftRadius) {
-		Circle shiftedCircle;
-		shiftedCircle.center.x = circle.center.x + shiftX;
-		shiftedCircle.center.y = circle.center.y + shiftY;
-		shiftedCircle.radius = circle.radius + shiftRadius;
+	Shape shiftShape(const Shape &shape, const float shiftX, const float shiftY,
+					 const float shiftRadius) {
+		Shape shiftedShape;
+		shiftedShape.center.x = shape.center.x + shiftX;
+		shiftedShape.center.y = shape.center.y + shiftY;
+		shiftedShape.radius = shape.radius + shiftRadius;
 		for (int i = 0; i < 3; i++) {
-			shiftedCircle.color[i] = circle.color[i];
+			shiftedShape.color[i] = shape.color[i];
 		}
-		return shiftedCircle;
+		return shiftedShape;
 	}
 
-	std::optional<Vec2i> calcCircleRangeY(const Circle &circle, const int x,
-										  const int imgHeight) {
-		const float xFloat = static_cast<float>(x);
-		const float dx = xFloat - circle.center.x;
-		const float radiusSq = circle.radius * circle.radius;
-		const float distSq = dx * dx;
-		if (distSq > radiusSq) {
-			return std::nullopt;
+	struct CirclePolicy {
+		static std::optional<Vec2i> calcRangeX(const Shape &shape, const int y,
+											   const int imgWidth) {
+			const float yFloat = static_cast<float>(y);
+			const float dy = yFloat - shape.center.y;
+			const float radiusSq = shape.radius * shape.radius;
+			const float distSq = dy * dy;
+			if (distSq > radiusSq) {
+				return std::nullopt;
+			}
+			const float dx = std::sqrt(radiusSq - distSq);
+			int xStart = static_cast<int>(std::ceil(shape.center.x - dx));
+			int xEnd = static_cast<int>(std::floor(shape.center.x + dx));
+			xStart = std::max(0, xStart);
+			xEnd = std::min(imgWidth - 1, xEnd);
+			return Vec2i{xStart, xEnd};
 		}
-		const float dy = std::sqrt(radiusSq - distSq);
-		int yStart = static_cast<int>(std::ceil(circle.center.y - dy));
-		int yEnd = static_cast<int>(std::floor(circle.center.y + dy));
-		yStart = std::max(0, yStart);
-		yEnd = std::min(imgHeight - 1, yEnd);
-		return Vec2i{yStart, yEnd};
-	}
+	};
 
-	std::optional<Vec2i> calcCircleRangeX(const Circle &circle, const int y,
-										  const int imgWidth) {
-		const float yFloat = static_cast<float>(y);
-		const float dy = yFloat - circle.center.y;
-		const float radiusSq = circle.radius * circle.radius;
-		const float distSq = dy * dy;
-		if (distSq > radiusSq) {
-			return std::nullopt;
+	struct SquarePolicy {
+		static std::optional<Vec2i> calcRangeX(const Shape &shape, const int y,
+											   const int imgWidth) {
+			const float yFloat = static_cast<float>(y);
+			const float dy = std::abs(yFloat - shape.center.y);
+			const float halfSide = shape.radius / std::sqrt(2.0f);
+			if (dy > halfSide) {
+				return std::nullopt;
+			}
+			int xStart = static_cast<int>(std::ceil(shape.center.x - halfSide));
+			int xEnd = static_cast<int>(std::floor(shape.center.x + halfSide));
+			xStart = std::max(0, xStart);
+			xEnd = std::min(imgWidth - 1, xEnd);
+			return Vec2i(xStart, xEnd);
 		}
-		const float dx = std::sqrt(radiusSq - distSq);
-		int xStart = static_cast<int>(std::ceil(circle.center.x - dx));
-		int xEnd = static_cast<int>(std::floor(circle.center.x + dx));
-		xStart = std::max(0, xStart);
-		xEnd = std::min(imgWidth - 1, xEnd);
-		return Vec2i{xStart, xEnd};
-	}
+	};
+
+	struct DiamondPolicy {
+		static std::optional<Vec2i> calcRangeX(const Shape &shape, const int y,
+											   const int imgWidth) {
+			const float yFloat = static_cast<float>(y);
+			const float dy = std::abs(yFloat - shape.center.y);
+			if (dy > shape.radius) {
+				return std::nullopt;
+			}
+			const float dx = shape.radius - dy;
+			int xStart = static_cast<int>(std::ceil(shape.center.x - dx));
+			int xEnd = static_cast<int>(std::floor(shape.center.x + dx));
+			xStart = std::max(0, xStart);
+			xEnd = std::min(imgWidth - 1, xEnd);
+			return Vec2i(xStart, xEnd);
+		}
+	};
+
+	struct TriangleUpPolicy {
+		static std::optional<Vec2i> calcRangeX(const Shape &shape, const int y,
+											   const int imgWidth) {
+			const float yFloat = static_cast<float>(y);
+			const float dy = yFloat - shape.center.y;
+			if (dy < -shape.radius || dy > shape.radius * 0.5f) {
+				return std::nullopt;
+			}
+			const float dx = (dy + shape.radius) / std::sqrt(3.0f);
+			int xStart = static_cast<int>(std::ceil(shape.center.x - dx));
+			int xEnd = static_cast<int>(std::floor(shape.center.x + dx));
+			xStart = std::max(0, xStart);
+			xEnd = std::min(imgWidth - 1, xEnd);
+			return Vec2i(xStart, xEnd);
+		}
+	};
+
+	struct TriangleDownPolicy {
+		static std::optional<Vec2i> calcRangeX(const Shape &shape, const int y,
+											   const int imgWidth) {
+			const float yFloat = static_cast<float>(y);
+			const float dy = yFloat - shape.center.y;
+			if (dy > shape.radius || dy < -shape.radius * 0.5f) {
+				return std::nullopt;
+			}
+			const float dx = (shape.radius - dy) / std::sqrt(3.0f);
+			int xStart = static_cast<int>(std::ceil(shape.center.x - dx));
+			int xEnd = static_cast<int>(std::floor(shape.center.x + dx));
+			xStart = std::max(0, xStart);
+			xEnd = std::min(imgWidth - 1, xEnd);
+			return Vec2i(xStart, xEnd);
+		}
+	};
+
+	struct HexagonPolicy {
+		static std::optional<Vec2i> calcRangeX(const Shape &shape, const int y,
+											   const int imgWidth) {
+			const float yFloat = static_cast<float>(y);
+			const float dy = std::abs(yFloat - shape.center.y);
+			if (dy > shape.radius) {
+				return std::nullopt;
+			}
+			float dx = 0.0f;
+			if (dy > shape.radius * 0.5f) {
+				dx = (shape.radius - dy) * std::sqrt(3.0f);
+			} else {
+				dx = shape.radius * std::sqrt(3.0f) * 0.5f;
+			}
+			int xStart = static_cast<int>(std::ceil(shape.center.x - dx));
+			int xEnd = static_cast<int>(std::floor(shape.center.x + dx));
+			xStart = std::max(0, xStart);
+			xEnd = std::min(imgWidth - 1, xEnd);
+			return Vec2i(xStart, xEnd);
+		}
+	};
 
 	float calcPixelLoss(const Vec3f &accum, const int count,
 						const Vec3f &imageColor) {
@@ -282,34 +357,35 @@ class CircleSplatting {
 		return lossDelta;
 	}
 
-	void renderCircles(std::vector<Circle> &circles, const float scale) {
+	template <typename ShapePolicy>
+	void renderShapes(std::vector<Shape> &shapes, const float scale) {
 		const int imgWidth = width;
 		const int imgHeight = height;
 		std::vector<std::vector<Vec3f>> canvasColorsAccum(
 			imgHeight, std::vector<Vec3f>(imgWidth, Vec3f{0.0f, 0.0f, 0.0f}));
 		std::vector<std::vector<int>> canvasCounts(
 			imgHeight, std::vector<int>(imgWidth, 0));
-		for (auto circle : circles) {
-			circle.center.x *= scale;
-			circle.center.y *= scale;
-			circle.radius += 0.5f;
-			circle.radius *= scale;
+		for (auto shape : shapes) {
+			shape.center.x *= scale;
+			shape.center.y *= scale;
+			shape.radius += 0.5f;
+			shape.radius *= scale;
 			const int yStart = std::max(
-				0,
-				static_cast<int>(std::ceil(circle.center.y - circle.radius)));
+				0, static_cast<int>(std::ceil(shape.center.y - shape.radius)));
 			const int yEnd = std::min(
 				imgHeight - 1,
-				static_cast<int>(std::floor(circle.center.y + circle.radius)));
+				static_cast<int>(std::floor(shape.center.y + shape.radius)));
 			for (int y = yStart; y <= yEnd; ++y) {
-				const auto xRangeOpt = calcCircleRangeX(circle, y, imgWidth);
+				const auto xRangeOpt =
+					ShapePolicy::calcRangeX(shape, y, imgWidth);
 				if (!xRangeOpt.has_value()) {
 					continue;
 				}
 				const Vec2i xRange = xRangeOpt.value();
-				canvasColorsAccum[y][xRange[0]] += circle.color;
+				canvasColorsAccum[y][xRange[0]] += shape.color;
 				canvasCounts[y][xRange[0]] += 1;
 				if (xRange[1] + 1 < imgWidth) {
-					canvasColorsAccum[y][xRange[1] + 1] -= circle.color;
+					canvasColorsAccum[y][xRange[1] + 1] -= shape.color;
 					canvasCounts[y][xRange[1] + 1] -= 1;
 				}
 			}
@@ -344,24 +420,8 @@ class CircleSplatting {
 		}
 	}
 
-  public:
-	CircleSplatting(int w, int h) : width(w), height(h) {
-		rng.setSeed(static_cast<uint32_t>(std::random_device()()));
-		const size_t bufferSize = w * h * 4;
-
-		originalImageBuffer.resize(bufferSize, 255);
-		drawBuffer.resize(bufferSize, 255);
-
-		std::cout << "[WASM] Crated instance for " << w << "x" << h
-				  << std::endl;
-	}
-
-	emscripten::val getInputBuffer() {
-		return emscripten::val(emscripten::typed_memory_view(
-			originalImageBuffer.size(), originalImageBuffer.data()));
-	}
-
-	void run(int numCircles, int numEpochs, int radiusMax) {
+	template <typename ShapePolicy>
+	void optimizeAndRender(int numShapes, int numEpochs, float radiusMax) {
 		const float scaleFactor =
 			200.0f / static_cast<float>(std::max(width, height));
 		const int newWidth = static_cast<int>(std::round(width * scaleFactor));
@@ -384,15 +444,15 @@ class CircleSplatting {
 				}
 			}
 		}
-		std::vector<Circle> circles(numCircles);
-		for (auto &circle : circles) {
-			circle.center =
+		std::vector<Shape> shapes(numShapes);
+		for (auto &shape : shapes) {
+			shape.center =
 				Vec2f{rng.nextFloat(0.0f, static_cast<float>(newWidth - 1)),
 					  rng.nextFloat(0.0f, static_cast<float>(newHeight - 1))};
-			circle.radius =
+			shape.radius =
 				std::exp(rng.nextFloat(std::log(1.0f), std::log(radiusMax)));
-			circle.color = image[static_cast<int>(circle.center.y)]
-								[static_cast<int>(circle.center.x)];
+			shape.color = image[static_cast<int>(shape.center.y)]
+							   [static_cast<int>(shape.center.x)];
 		}
 
 		for (int iter = 0; iter < numEpochs; ++iter) {
@@ -401,24 +461,24 @@ class CircleSplatting {
 				std::vector<Vec3f>(newWidth, Vec3f{0.0f, 0.0f, 0.0f}));
 			std::vector<std::vector<int>> canvasCounts(
 				newHeight, std::vector<int>(newWidth, 0));
-			for (auto &circle : circles) {
-				const int yStart =
-					std::max(0, static_cast<int>(std::ceil(circle.center.y -
-														   circle.radius)));
+			for (auto &shape : shapes) {
+				const int yStart = std::max(
+					0,
+					static_cast<int>(std::ceil(shape.center.y - shape.radius)));
 				const int yEnd = std::min(
-					newHeight - 1, static_cast<int>(std::floor(circle.center.y +
-															   circle.radius)));
+					newHeight - 1, static_cast<int>(std::floor(shape.center.y +
+															   shape.radius)));
 				for (int y = yStart; y <= yEnd; ++y) {
 					const auto xRangeOpt =
-						calcCircleRangeX(circle, y, newWidth);
+						ShapePolicy::calcRangeX(shape, y, newWidth);
 					if (!xRangeOpt.has_value()) {
 						continue;
 					}
 					const Vec2i xRange = xRangeOpt.value();
-					canvasColorsAccum[y][xRange[0]] += circle.color;
+					canvasColorsAccum[y][xRange[0]] += shape.color;
 					canvasCounts[y][xRange[0]] += 1;
 					if (xRange[1] != newWidth - 1) {
-						canvasColorsAccum[y][xRange[1] + 1] -= circle.color;
+						canvasColorsAccum[y][xRange[1] + 1] -= shape.color;
 						canvasCounts[y][xRange[1] + 1] -= 1;
 					}
 				}
@@ -429,45 +489,43 @@ class CircleSplatting {
 					canvasCounts[y][x] += canvasCounts[y][x - 1];
 				}
 			}
-			for (auto &circle : circles) {
+			for (auto &shape : shapes) {
 				Vec3f dLdcolor = {0.0f, 0.0f, 0.0f};
 				float dLdx = 0.0f;
 				float dLdy = 0.0f;
 				float dLdr = 0.0f;
 
-				const auto circleShiftedX =
-					shiftCircle(circle, 1.0f, 0.0f, 0.0f);
-				const auto circleShiftedY =
-					shiftCircle(circle, 0.0f, 1.0f, 0.0f);
-				const auto circleShiftedRadius =
-					shiftCircle(circle, 0.0f, 0.0f, 1.0f);
+				const auto shapeShiftedX = shiftShape(shape, 1.0f, 0.0f, 0.0f);
+				const auto shapeShiftedY = shiftShape(shape, 0.0f, 1.0f, 0.0f);
+				const auto shapeShiftedRadius =
+					shiftShape(shape, 0.0f, 0.0f, 1.0f);
 
-				const int yStart =
-					std::max(0, static_cast<int>(std::ceil(circle.center.y -
-														   circle.radius)) -
-									1);
+				const int yStart = std::max(
+					0,
+					static_cast<int>(std::ceil(shape.center.y - shape.radius)) -
+						1);
 				const int yEnd = std::min(
-					newHeight - 1, static_cast<int>(std::floor(circle.center.y +
-															   circle.radius)) +
+					newHeight - 1, static_cast<int>(std::floor(shape.center.y +
+															   shape.radius)) +
 									   1);
 				for (int y = yStart; y <= yEnd; ++y) {
 					const auto xRangeOpt =
-						calcCircleRangeX(circle, y, newWidth);
+						ShapePolicy::calcRangeX(shape, y, newWidth);
 					const auto xRangeShiftedXOpt =
-						calcCircleRangeX(circleShiftedX, y, newWidth);
+						ShapePolicy::calcRangeX(shapeShiftedX, y, newWidth);
 					const auto xRangeShiftedYOpt =
-						calcCircleRangeX(circleShiftedY, y, newWidth);
-					const auto xRangeShiftedRadiusOpt =
-						calcCircleRangeX(circleShiftedRadius, y, newWidth);
+						ShapePolicy::calcRangeX(shapeShiftedY, y, newWidth);
+					const auto xRangeShiftedRadiusOpt = ShapePolicy::calcRangeX(
+						shapeShiftedRadius, y, newWidth);
 
 					dLdx += calcLossDeltaFromRanges(
-						xRangeOpt, xRangeShiftedXOpt, y, circle.color, image,
+						xRangeOpt, xRangeShiftedXOpt, y, shape.color, image,
 						canvasColorsAccum, canvasCounts);
 					dLdy += calcLossDeltaFromRanges(
-						xRangeOpt, xRangeShiftedYOpt, y, circle.color, image,
+						xRangeOpt, xRangeShiftedYOpt, y, shape.color, image,
 						canvasColorsAccum, canvasCounts);
 					dLdr += calcLossDeltaFromRanges(
-						xRangeOpt, xRangeShiftedRadiusOpt, y, circle.color,
+						xRangeOpt, xRangeShiftedRadiusOpt, y, shape.color,
 						image, canvasColorsAccum, canvasCounts);
 					if (!xRangeOpt.has_value()) {
 						continue;
@@ -492,29 +550,67 @@ class CircleSplatting {
 						}
 					}
 				}
-				// Update circle parameters
+				// Update shape parameters
 				const float learningRateColor = 1.0f;
 
-				const float radiusSq = circle.radius * circle.radius;
-				circle.color -= dLdcolor * (learningRateColor / radiusSq);
+				const float radiusSq = shape.radius * shape.radius;
+				shape.color -= dLdcolor * (learningRateColor / radiusSq);
 				for (int c = 0; c < 3; ++c) {
-					circle.color[c] = std::clamp(circle.color[c], 0.0f, 1.0f);
+					shape.color[c] = std::clamp(shape.color[c], 0.0f, 1.0f);
 				}
 
 				const float learningRatePosition = 1.0f;
-				circle.center.x -= learningRatePosition * dLdx / circle.radius;
-				circle.center.y -= learningRatePosition * dLdy / circle.radius;
-				circle.center.x = std::clamp(circle.center.x, 0.0f,
-											 static_cast<float>(newWidth - 1));
-				circle.center.y = std::clamp(circle.center.y, 0.0f,
-											 static_cast<float>(newHeight - 1));
+				shape.center.x -= learningRatePosition * dLdx / shape.radius;
+				shape.center.y -= learningRatePosition * dLdy / shape.radius;
+				shape.center.x = std::clamp(shape.center.x, 0.0f,
+											static_cast<float>(newWidth - 1));
+				shape.center.y = std::clamp(shape.center.y, 0.0f,
+											static_cast<float>(newHeight - 1));
 				const float learningRateRadius = 0.01f;
-				circle.radius -= learningRateRadius * dLdr / circle.radius;
+				shape.radius -= learningRateRadius * dLdr / shape.radius;
 				const float maxRadius = std::min(newWidth, newHeight);
-				circle.radius = std::clamp(circle.radius, 1.0f, maxRadius);
+				shape.radius = std::clamp(shape.radius, 1.0f, maxRadius);
 			}
 		}
-		renderCircles(circles, 1.0f / static_cast<float>(scaleFactor));
+		renderShapes<ShapePolicy>(shapes,
+								  1.0f / static_cast<float>(scaleFactor));
+	}
+
+  public:
+	CircleSplatting(int w, int h) : width(w), height(h) {
+		rng.setSeed(static_cast<uint32_t>(std::random_device()()));
+		const size_t bufferSize = w * h * 4;
+
+		originalImageBuffer.resize(bufferSize, 255);
+		drawBuffer.resize(bufferSize, 255);
+
+		std::cout << "[WASM] Crated instance for " << w << "x" << h
+				  << std::endl;
+	}
+
+	emscripten::val getInputBuffer() {
+		return emscripten::val(emscripten::typed_memory_view(
+			originalImageBuffer.size(), originalImageBuffer.data()));
+	}
+
+	void run(int numShapes, int numEpochs, int radiusMax, std::string mode) {
+		if (mode == "circle") {
+			optimizeAndRender<CirclePolicy>(numShapes, numEpochs, radiusMax);
+		} else if (mode == "square") {
+			optimizeAndRender<SquarePolicy>(numShapes, numEpochs, radiusMax);
+		} else if (mode == "diamond") {
+			optimizeAndRender<DiamondPolicy>(numShapes, numEpochs, radiusMax);
+		} else if (mode == "triangle-up") {
+			optimizeAndRender<TriangleUpPolicy>(numShapes, numEpochs,
+												radiusMax);
+		} else if (mode == "triangle-down") {
+			optimizeAndRender<TriangleDownPolicy>(numShapes, numEpochs,
+												  radiusMax);
+		} else if (mode == "hexagon") {
+			optimizeAndRender<HexagonPolicy>(numShapes, numEpochs, radiusMax);
+		} else {
+			std::cout << "[WASM] Unknown mode: " << mode << std::endl;
+		}
 	}
 	emscripten::val getDrawImageData() {
 		return emscripten::val(emscripten::typed_memory_view(
